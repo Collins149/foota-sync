@@ -11,6 +11,9 @@ const LEAGUES = [
   { code: "DED", name: "Eredivisie" },
 ];
 
+// Synced matches older than this many days are removed
+const KEEP_DAYS = 3;
+
 const API_KEY = process.env.FOOTBALL_DATA_KEY;
 const SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT;
 
@@ -58,6 +61,29 @@ async function fetchLeague(code, from, to) {
   }
   const data = await response.json();
   return data.matches || [];
+}
+
+// Deletes synced matches (ids starting with fd_) that kicked off long ago.
+// Hand-made matches are never touched.
+async function cleanup() {
+  const cutoff = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() - KEEP_DAYS * 24 * 60 * 60 * 1000)
+  );
+
+  const snapshot = await db
+    .collection("matches")
+    .where("kickoff", "<", cutoff)
+    .get();
+
+  const oldSynced = snapshot.docs.filter((doc) => doc.id.startsWith("fd_"));
+
+  for (let i = 0; i < oldSynced.length; i += 400) {
+    const batch = db.batch();
+    oldSynced.slice(i, i + 400).forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+
+  console.log(`Cleanup: removed ${oldSynced.length} old synced matches.`);
 }
 
 async function main() {
@@ -112,6 +138,12 @@ async function main() {
 
     // Stay well under the free plan's 10 calls per minute
     await sleep(1500);
+  }
+
+  try {
+    await cleanup();
+  } catch (error) {
+    console.error(`Cleanup failed: ${error.message}`);
   }
 
   console.log(`Done. ${written} matches saved, ${failedLeagues} leagues failed.`);
