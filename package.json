@@ -1,0 +1,13 @@
+{
+  "name": "foota-sync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Copies Football-Data.org matches into Firestore",
+  "main": "sync.js",
+  "scripts": {
+    "start": "node sync.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
