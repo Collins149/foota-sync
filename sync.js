@@ -11,6 +11,19 @@ const LEAGUES = [
   { code: "DED", name: "Eredivisie" },
 ];
 
+// The leagues the app lists. Created only if missing, never overwritten.
+const LOGO_BASE =
+  "https://raw.githubusercontent.com/Collins149/foota-assets/main/";
+const LEAGUE_DOCS = [
+  { id: "premier-league", name: "Premier League", country: "England", sortOrder: 1, logo: "premier-league.png" },
+  { id: "la-liga", name: "La Liga", country: "Spain", sortOrder: 2, logo: "la-liga.png" },
+  { id: "bundesliga", name: "Bundesliga", country: "Germany", sortOrder: 3, logo: "bundesliga.png" },
+  { id: "serie-a", name: "Serie A", country: "Italy", sortOrder: 4, logo: "serie-a.png" },
+  { id: "ligue-1", name: "Ligue 1", country: "France", sortOrder: 5, logo: "ligue-1.png" },
+  { id: "eredivisie", name: "Eredivisie", country: "Netherlands", sortOrder: 6, logo: "eredivisie.png" },
+  { id: "saudi-pro-league", name: "Saudi Pro League", country: "Saudi Arabia", sortOrder: 7, logo: "saudi-pro-league.png" },
+];
+
 // Synced matches older than this many days are removed
 const KEEP_DAYS = 3;
 
@@ -63,6 +76,26 @@ async function fetchLeague(code, from, to) {
   return data.matches || [];
 }
 
+// Creates any league document that is missing. Existing ones are left alone,
+// so anything you edit in the console is kept.
+async function restoreLeagues() {
+  let created = 0;
+  for (const league of LEAGUE_DOCS) {
+    const ref = db.collection("leagues").doc(league.id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({
+        name: league.name,
+        country: league.country,
+        sortOrder: league.sortOrder,
+        logoUrl: LOGO_BASE + league.logo,
+      });
+      created++;
+    }
+  }
+  console.log(`Leagues: restored ${created} missing leagues.`);
+}
+
 // Deletes synced matches (ids starting with fd_) that kicked off long ago.
 // Hand-made matches are never touched.
 async function cleanup() {
@@ -87,6 +120,12 @@ async function cleanup() {
 }
 
 async function main() {
+  try {
+    await restoreLeagues();
+  } catch (error) {
+    console.error(`Restoring leagues failed: ${error.message}`);
+  }
+
   const today = new Date();
   const from = isoDate(new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000));
   const to = isoDate(new Date(today.getTime() + 8 * 24 * 60 * 60 * 1000));
