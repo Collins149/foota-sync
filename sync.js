@@ -9,9 +9,16 @@ const LEAGUES = [
   { code: "SA", name: "Serie A" },
   { code: "FL1", name: "Ligue 1" },
   { code: "DED", name: "Eredivisie" },
+  { code: "ELC", name: "Championship" },
+  { code: "CL", name: "Champions League" },
+  { code: "PPL", name: "Primeira Liga" },
+  { code: "BSA", name: "Brazil Serie A" },
+  { code: "EC", name: "European Championship" },
+  { code: "WC", name: "World Cup" },
 ];
 
 // The leagues the app lists. Created only if missing, never overwritten.
+// A league with logo: null shows a letter circle until you add a logoUrl.
 const LOGO_BASE =
   "https://raw.githubusercontent.com/Collins149/foota-assets/main/";
 const LEAGUE_DOCS = [
@@ -22,10 +29,19 @@ const LEAGUE_DOCS = [
   { id: "ligue-1", name: "Ligue 1", country: "France", sortOrder: 5, logo: "ligue-1.png" },
   { id: "eredivisie", name: "Eredivisie", country: "Netherlands", sortOrder: 6, logo: "eredivisie.png" },
   { id: "saudi-pro-league", name: "Saudi Pro League", country: "Saudi Arabia", sortOrder: 7, logo: "saudi-pro-league.png" },
+  { id: "championship", name: "Championship", country: "England", sortOrder: 8, logo: null },
+  { id: "champions-league", name: "Champions League", country: "Europe", sortOrder: 9, logo: null },
+  { id: "primeira-liga", name: "Primeira Liga", country: "Portugal", sortOrder: 10, logo: null },
+  { id: "brazil-serie-a", name: "Brazil Serie A", country: "Brazil", sortOrder: 11, logo: null },
+  { id: "european-championship", name: "European Championship", country: "Europe", sortOrder: 12, logo: null },
+  { id: "world-cup", name: "World Cup", country: "World", sortOrder: 13, logo: null },
 ];
 
 // Synced matches older than this many days are removed
 const KEEP_DAYS = 3;
+
+// The free plan allows 10 calls per minute, so wait between leagues
+const PAUSE_MS = 7000;
 
 const API_KEY = process.env.FOOTBALL_DATA_KEY;
 const SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -88,12 +104,12 @@ async function restoreLeagues() {
         name: league.name,
         country: league.country,
         sortOrder: league.sortOrder,
-        logoUrl: LOGO_BASE + league.logo,
+        logoUrl: league.logo ? LOGO_BASE + league.logo : "",
       });
       created++;
     }
   }
-  console.log(`Leagues: restored ${created} missing leagues.`);
+  console.log(`Leagues: created ${created} missing leagues.`);
 }
 
 // Deletes synced matches (ids starting with fd_) that kicked off long ago.
@@ -175,8 +191,7 @@ async function main() {
       console.error(`${league.name} failed: ${error.message}`);
     }
 
-    // Stay well under the free plan's 10 calls per minute
-    await sleep(1500);
+    await sleep(PAUSE_MS);
   }
 
   try {
