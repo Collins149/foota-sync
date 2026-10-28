@@ -1,24 +1,23 @@
 const admin = require("firebase-admin");
 
-// Your league name -> the API's competition code.
+// Your league name -> the API's competition code, and the league's document id.
 // Saudi Pro League is not on the free plan, so it stays manual in the console.
 const LEAGUES = [
-  { code: "PL", name: "Premier League" },
-  { code: "PD", name: "La Liga" },
-  { code: "BL1", name: "Bundesliga" },
-  { code: "SA", name: "Serie A" },
-  { code: "FL1", name: "Ligue 1" },
-  { code: "DED", name: "Eredivisie" },
-  { code: "ELC", name: "Championship" },
-  { code: "CL", name: "Champions League" },
-  { code: "PPL", name: "Primeira Liga" },
-  { code: "BSA", name: "Brazil Serie A" },
-  { code: "EC", name: "European Championship" },
-  { code: "WC", name: "World Cup" },
+  { code: "PL", name: "Premier League", docId: "premier-league" },
+  { code: "PD", name: "La Liga", docId: "la-liga" },
+  { code: "BL1", name: "Bundesliga", docId: "bundesliga" },
+  { code: "SA", name: "Serie A", docId: "serie-a" },
+  { code: "FL1", name: "Ligue 1", docId: "ligue-1" },
+  { code: "DED", name: "Eredivisie", docId: "eredivisie" },
+  { code: "ELC", name: "Championship", docId: "championship" },
+  { code: "CL", name: "Champions League", docId: "champions-league" },
+  { code: "PPL", name: "Primeira Liga", docId: "primeira-liga" },
+  { code: "BSA", name: "Brazil Serie A", docId: "brazil-serie-a" },
+  { code: "EC", name: "European Championship", docId: "european-championship" },
+  { code: "WC", name: "World Cup", docId: "world-cup" },
 ];
 
 // The leagues the app lists. Created only if missing, never overwritten.
-// A league with logo: null shows a letter circle until you add a logoUrl.
 const LOGO_BASE =
   "https://raw.githubusercontent.com/Collins149/foota-assets/main/";
 const LEAGUE_DOCS = [
@@ -80,6 +79,7 @@ function mapStatus(status) {
   }
 }
 
+// Returns the league's matches and its emblem link
 async function fetchLeague(code, from, to) {
   const url =
     `https://api.football-data.org/v4/competitions/${code}/matches` +
@@ -89,7 +89,10 @@ async function fetchLeague(code, from, to) {
     throw new Error(`${code}: HTTP ${response.status}`);
   }
   const data = await response.json();
-  return data.matches || [];
+  return {
+    matches: data.matches || [],
+    emblem: (data.competition && data.competition.emblem) || "",
+  };
 }
 
 // Creates any league document that is missing. Existing ones are left alone,
@@ -110,6 +113,18 @@ async function restoreLeagues() {
     }
   }
   console.log(`Leagues: created ${created} missing leagues.`);
+}
+
+// Fills a league's logo from the API, only when the league has none yet.
+// A logo you set yourself in the console is never replaced.
+async function fillLeagueLogo(docId, emblem) {
+  if (!emblem) return;
+  const ref = db.collection("leagues").doc(docId);
+  const snap = await ref.get();
+  if (snap.exists && !snap.data().logoUrl) {
+    await ref.update({ logoUrl: emblem });
+    console.log(`  logo set for ${docId}`);
+  }
 }
 
 // Deletes synced matches (ids starting with fd_) that kicked off long ago.
@@ -151,7 +166,7 @@ async function main() {
 
   for (const league of LEAGUES) {
     try {
-      const matches = await fetchLeague(league.code, from, to);
+      const { matches, emblem } = await fetchLeague(league.code, from, to);
       const batch = db.batch();
       let count = 0;
 
@@ -177,6 +192,8 @@ async function main() {
             minute,
             league: league.name,
             kickoff: admin.firestore.Timestamp.fromDate(new Date(m.utcDate)),
+            homeLogo: (m.homeTeam && m.homeTeam.crest) || "",
+            awayLogo: (m.awayTeam && m.awayTeam.crest) || "",
           },
           { merge: true }
         );
@@ -186,6 +203,8 @@ async function main() {
       if (count > 0) await batch.commit();
       written += count;
       console.log(`${league.name}: saved ${count} matches`);
+
+      await fillLeagueLogo(league.docId, emblem);
     } catch (error) {
       failedLeagues++;
       console.error(`${league.name} failed: ${error.message}`);
